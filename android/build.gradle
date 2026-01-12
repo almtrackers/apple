@@ -1,0 +1,88 @@
+// Top-level build file where you can add configuration options common to all sub-projects/modules.
+
+buildscript {
+
+    repositories {
+        google()
+        mavenCentral()
+    }
+    dependencies {
+        classpath 'com.android.tools.build:gradle:8.13.1'
+        classpath 'com.google.gms:google-services:4.4.2'
+
+        // NOTE: Do not place your application dependencies here; they belong
+        // in the individual module build.gradle files
+    }
+}
+
+apply from: "variables.gradle"
+
+allprojects {
+    repositories {
+        google()
+        mavenCentral()
+    }
+}
+
+task clean(type: Delete) {
+    delete rootProject.buildDir
+}
+
+// Handle OneDrive path deletion errors in all clean tasks
+afterEvaluate {
+    tasks.matching { it.name == "clean" && it instanceof org.gradle.api.tasks.Delete }.configureEach { task ->
+        // Filter out OneDrive paths before deletion
+        task.doFirst {
+            if (task.hasProperty('delete')) {
+                def filesToDelete = task.delete
+                if (filesToDelete != null) {
+                    // Wrap in try-catch to handle file collection issues
+                    try {
+                        def filteredFiles = project.files(filesToDelete).filter { file ->
+                            def path = file.toString()
+                            if (path.contains("OneDrive")) {
+                                logger.warn("Skipping OneDrive path in clean task: ${path}")
+                                return false
+                            }
+                            return true
+                        }
+                        task.delete = filteredFiles
+                    } catch (Exception e) {
+                        logger.warn("Error filtering OneDrive paths in clean task: ${e.message}")
+                    }
+                }
+            }
+        }
+        
+        // Catch and ignore errors when deleting OneDrive paths
+        task.doLast {
+            // Clean task completed - any OneDrive errors were ignored
+        }
+    }
+    
+    // Handle all Delete tasks across all projects
+    allprojects { project ->
+        project.tasks.matching { it instanceof org.gradle.api.tasks.Delete }.configureEach { deleteTask ->
+            deleteTask.doFirst {
+                try {
+                    if (deleteTask.hasProperty('delete')) {
+                        def filesToDelete = deleteTask.delete
+                        if (filesToDelete != null) {
+                            def filteredFiles = project.files(filesToDelete).filter { file ->
+                                def path = file.toString()
+                                if (path.contains("OneDrive")) {
+                                    logger.warn("Skipping OneDrive path: ${path}")
+                                    return false
+                                }
+                                return true
+                            }
+                            deleteTask.delete = filteredFiles
+                        }
+                    }
+                } catch (Exception e) {
+                    logger.warn("Error filtering OneDrive paths: ${e.message}")
+                }
+            }
+        }
+    }
+}

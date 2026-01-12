@@ -1,0 +1,30 @@
+{
+  "project_info": {
+    "project_number": "846385769012",
+    "firebase_url": "https://al-muhafiz-trackers-default-rtdb.asia-southeast1.firebasedatabase.app",
+    "project_id": "al-muhafiz-trackers",
+    "storage_bucket": "al-muhafiz-trackers.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:846385769012:android:e5aa6eaa4fd3e371baf861",
+        "android_client_info": {
+          "package_name": "com.almuhafiz.tracker"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyAY44_U_sO_mODcKG8Ioq4Nyaf7RnilKzE"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}

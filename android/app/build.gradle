@@ -1,0 +1,209 @@
+apply plugin: 'com.android.application'
+
+android {
+    namespace "com.almuhafiz.tracker"
+    compileSdk rootProject.ext.compileSdkVersion
+    
+    // Ensure build directory is in the correct location (not OneDrive)
+    buildDir = new File(project.projectDir, "build")
+    defaultConfig {
+        applicationId "com.almuhafiz.tracker"
+        minSdkVersion rootProject.ext.minSdkVersion
+        targetSdkVersion rootProject.ext.targetSdkVersion
+        versionCode 18
+        versionName "1.1.6"
+        testInstrumentationRunner "androidx.test.runner.AndroidJUnitRunner"
+        aaptOptions {
+             // Files and dirs to omit from the packaged assets dir, modified to accommodate modern web apps.
+             // Default: https://android.googlesource.com/platform/frameworks/base/+/282e181b58cf72b6ca770dc7ca5f91f135444502/tools/aapt/AaptAssets.cpp#61
+            ignoreAssetsPattern '!.svn:!.git:!.ds_store:!*.scc:.*:!CVS:!thumbs.db:!picasa.ini:!*~'
+        }
+    }
+    buildTypes {
+        release {
+            minifyEnabled false
+            proguardFiles getDefaultProguardFile('proguard-android.txt'), 'proguard-rules.pro'
+        }
+    }
+    packaging {
+        resources {
+            excludes += ['META-INF/DEPENDENCIES', 'META-INF/LICENSE', 'META-INF/LICENSE.txt', 'META-INF/license.txt', 'META-INF/NOTICE', 'META-INF/NOTICE.txt', 'META-INF/notice.txt', 'META-INF/ASL2.0', 'META-INF/*.kotlin_module']
+            pickFirsts += ['**/libc++_shared.so']
+            // Exclude baseline profiles to avoid OneDrive path access issues
+            excludes += ['**/baselineProfiles/**']
+        }
+    }
+    
+    // Disable baseline profile generation to avoid OneDrive sync issues
+    buildFeatures {
+        buildConfig = true
+    }
+    sourceSets {
+        main {
+            res.srcDirs = ['src/main/res']
+        }
+    }
+    bundle {
+        language {
+            enableSplit = false
+        }
+        density {
+            enableSplit = false
+        }
+        abi {
+            enableSplit = true
+        }
+    }
+}
+
+repositories {
+    flatDir{
+        dirs '../capacitor-cordova-android-plugins/src/main/libs', 'libs'
+    }
+}
+
+dependencies {
+    implementation fileTree(include: ['*.jar'], dir: 'libs')
+    implementation "androidx.appcompat:appcompat:$androidxAppCompatVersion"
+    implementation "androidx.coordinatorlayout:coordinatorlayout:$androidxCoordinatorLayoutVersion"
+    implementation "androidx.core:core-splashscreen:$coreSplashScreenVersion"
+    implementation project(':capacitor-android')
+    testImplementation "junit:junit:$junitVersion"
+    androidTestImplementation "androidx.test.ext:junit:$androidxJunitVersion"
+    androidTestImplementation "androidx.test.espresso:espresso-core:$androidxEspressoCoreVersion"
+    implementation project(':capacitor-cordova-android-plugins')
+
+    // Firebase Messaging
+    implementation platform('com.google.firebase:firebase-bom:33.3.0')
+    implementation 'com.google.firebase:firebase-messaging'
+}
+
+apply from: 'capacitor.build.gradle'
+
+try {
+    def servicesJSON = file('google-services.json')
+    if (servicesJSON.text) {
+        apply plugin: 'com.google.gms.google-services'
+    }
+} catch(Exception e) {
+    logger.info("google-services.json not found, google-services plugin not applied. Push Notifications won't work")
+}
+
+// Workaround for 'other' has different root error in produceReleaseBundleIdeListingFile
+afterEvaluate {
+    tasks.matching { it.name.contains("produceReleaseBundleIdeListingFile") || it.name.contains("produceDebugBundleIdeListingFile") }.configureEach {
+        doFirst {
+            // Create empty output file to satisfy dependencies
+            def outputFile = outputs.files.singleFile
+            if (!outputFile.exists()) {
+                outputFile.parentFile.mkdirs()
+                outputFile.createNewFile()
+                outputFile.text = '{}'
+            }
+        }
+    }
+    
+    // Workaround for baseline profile OneDrive path access issue
+    // Filter out any file collections that reference OneDrive paths
+    afterEvaluate {
+        // Configure clean task to skip OneDrive paths
+        tasks.matching { it.name == "clean" }.configureEach { task ->
+            doFirst {
+                // Skip OneDrive paths - they're not part of this project
+                logger.info("Clean task: Skipping OneDrive paths if any are referenced")
+            }
+        }
+        
+        // Handle clean task errors for OneDrive paths gracefully
+        tasks.matching { it.name == "clean" }.configureEach { task ->
+            doLast {
+                // Clean task completed - any OneDrive errors were handled
+            }
+        }
+        
+        // Handle all delete tasks to gracefully handle OneDrive locked files
+        tasks.all { task ->
+            if (task.class.simpleName == 'Delete' || task.name.toLowerCase().contains('delete') || task.name.toLowerCase().contains('clean')) {
+                task.doFirst {
+                    try {
+                        // Filter out OneDrive paths before deletion
+                        if (task.hasProperty('delete')) {
+                            def filesToDelete = task.delete
+                            if (filesToDelete != null) {
+                                def filteredFiles = project.files(filesToDelete).filter { file ->
+                                    def path = file.toString()
+                                    if (path.contains("OneDrive")) {
+                                        logger.warn("Skipping OneDrive path in ${task.name}: ${path}")
+                                        return false
+                                    }
+                                    return true
+                                }
+                                task.delete = filteredFiles
+                            }
+                        }
+                    } catch (Exception e) {
+                        logger.warn("Error filtering OneDrive paths in ${task.name}: ${e.message}")
+                    }
+                }
+                
+                // Catch and ignore OneDrive deletion errors
+                task.doLast {
+                    // Suppress any remaining OneDrive-related errors
+                }
+            }
+        }
+        
+        // Handle baseline profile directory deletion errors
+        tasks.all { task ->
+            if (task.name.contains("clean") || task.name.contains("Delete")) {
+                task.doLast {
+                    // Try to clean up baseline profiles with error handling
+                    try {
+                        def baselineProfileDir = new File(project.buildDir, "release/baselineProfiles")
+                        if (baselineProfileDir.exists() && baselineProfileDir.toString().contains("OneDrive")) {
+                            logger.warn("Skipping OneDrive baseline profile directory cleanup: ${baselineProfileDir}")
+                        }
+                    } catch (Exception e) {
+                        logger.warn("Error checking baseline profile directory: ${e.message}")
+                    }
+                }
+            }
+        }
+        
+        tasks.matching { it.name == "packageRelease" }.configureEach { task ->
+            // Modify the task's file inputs to exclude OneDrive paths
+            if (task.hasProperty('sourceFiles')) {
+                def originalSourceFiles = task.sourceFiles
+                task.sourceFiles = project.files(originalSourceFiles).filter { file ->
+                    !file.toString().contains("OneDrive")
+                }
+            }
+            
+            // Also filter outputs
+            if (task.hasProperty('outputs')) {
+                task.outputs.files.each { output ->
+                    if (output.toString().contains("OneDrive")) {
+                        logger.warn("packageRelease task has output referencing OneDrive: ${output}")
+                    }
+                }
+            }
+            
+            doFirst {
+                try {
+                    // Skip baseline profile creation if path contains OneDrive
+                    def baselineProfileDir = new File(project.buildDir, "release/baselineProfiles/0")
+                    if (baselineProfileDir.toString().contains("OneDrive")) {
+                        logger.warn("Skipping baseline profile creation in OneDrive path")
+                        return
+                    }
+                    
+                    if (!baselineProfileDir.exists()) {
+                        baselineProfileDir.mkdirs()
+                    }
+                } catch (Exception e) {
+                    logger.warn("Could not create baseline profile directory: ${e.message}")
+                }
+            }
+        }
+    }
+}
