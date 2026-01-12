@@ -1,0 +1,26 @@
+{
+  "appId": "com.almuhafiz.tracker",
+  "appName": "AL-MUHAFIZ",
+  "webDir": "out",
+  "plugins": {
+    "SplashScreen": {
+      "launchShowDuration": 0
+    },
+    "CapacitorAssets": {
+      "android": {
+        "iconPath": "public/logo.png",
+        "splashScreenPath": "public/logo.png"
+      }
+    },
+    "PushNotifications": {
+      "presentationOptions": ["badge", "sound", "alert"]
+    }
+  },
+  "android": {
+    "icon": "public/logo.png",
+    "splash": {
+      "image": "public/logo.png",
+      "resize": "cover"
+    }
+  }
+}
